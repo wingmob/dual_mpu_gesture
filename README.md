@@ -1,0 +1,135 @@
+﻿# Dual MPU6050 Gesture Recognition Skeleton
+
+这个骨架面向 7 天内可交付、可演示、可量化的双 `MPU6050` 手势识别方案：
+
+- `Arduino Mega 2560` 负责双传感器采集与串口发送
+- `Python` 上位机负责记录数据、训练模型、实时分段与识别
+- 方案聚焦 `动态手势`，不是静态手型
+
+## 方案亮点
+
+- 双 `MPU6050` 分别固定在 `手背` 和 `前臂`
+- 使用 `相对姿态` 与 `相对角速度`，降低整条手臂平移带来的干扰
+- 用 `RandomForest` 做首版分类，速度快、调参简单、7 天内最稳
+- 自带训练、实时识别、数据采集骨架，能快速出准确率和演示效果
+
+## 目录结构
+
+```text
+dual_mpu_gesture/
+├─ arduino/
+│  └─ dual_mpu_gesture/
+│     └─ dual_mpu_gesture.ino
+├─ docs/
+│  └─ gesture_protocol.md
+├─ python/
+│  ├─ capture_labeled.py
+│  ├─ capture_stream.py
+│  ├─ features.py
+│  ├─ pose.py
+│  ├─ protocol.py
+│  ├─ realtime_demo.py
+│  └─ train_model.py
+├─ data/
+│  └─ raw/
+├─ models/
+└─ requirements.txt
+```
+
+## 硬件接线
+
+两个模块都接到 `Arduino Mega 2560` 的同一条 I2C 总线：
+
+- `VCC -> 5V` 或 `3.3V`
+  - 常见 `GY-521` 可接 `5V`
+  - 如果你的模块只支持 `3.3V`，按模块规格走
+- `GND -> GND`
+- `SDA -> 20`
+- `SCL -> 21`
+
+地址区分：
+
+- 手背传感器 `AD0 -> GND`，地址 `0x68`
+- 前臂传感器 `AD0 -> VCC`，地址 `0x69`
+
+建议两个传感器安装时 `坐标方向保持一致`，比如箭头都指向手指方向。
+
+## 串口协议
+
+固件以 `230400` 波特率输出 CSV。
+
+注释行以 `#` 开头，数据表头固定为：
+
+```text
+ts_ms,ax1,ay1,az1,gx1,gy1,gz1,ax2,ay2,az2,gx2,gy2,gz2
+```
+
+含义：
+
+- `1` 号传感器：手背
+- `2` 号传感器：前臂
+- `a*`：加速度原始计数
+- `g*`：角速度原始计数
+
+## 推荐手势
+
+建议先做这 6 个：
+
+- `flexion`：屈腕，手掌向下压
+- `extension`：背伸，手背向上抬
+- `radial_deviation`：向拇指侧偏
+- `ulnar_deviation`：向小指侧偏
+- `pronation`：旋前，向内旋
+- `supination`：旋后，向外旋
+
+如果时间紧，可以先做前 4 个。
+
+## 快速开始
+
+1. 烧录 Arduino 固件  
+   打开 `arduino/dual_mpu_gesture/dual_mpu_gesture.ino`
+
+2. 安装 Python 依赖
+
+```powershell
+python -m pip install -r requirements.txt
+```
+
+3. 连续查看原始串口流
+
+```powershell
+python .\python\capture_stream.py --port COM5
+```
+
+4. 采集带标签数据
+
+```powershell
+python .\python\capture_labeled.py --port COM5 --label flexion --trials 20
+python .\python\capture_labeled.py --port COM5 --label extension --trials 20
+```
+
+5. 训练模型
+
+```powershell
+python .\python\train_model.py --data-dir .\data\raw --model-out .\models\gesture_model.joblib
+```
+
+6. 实时识别
+
+```powershell
+python .\python\realtime_demo.py --port COM5 --model .\models\gesture_model.joblib --plot
+```
+
+## 7 天内的打法
+
+- 第 1 天：把串口数据读稳，确认双传感器地址和安装方向
+- 第 2 天：采 2 个动作，打通训练和实时识别闭环
+- 第 3 天：扩到 4 到 6 个动作，采样每类 20 次以上
+- 第 4 天：调阈值和分段逻辑，砍掉最不稳的动作
+- 第 5 天：把实时演示做顺，保留最稳的 4 到 6 类
+- 第 6 天：产出准确率、混淆矩阵、响应时间
+- 第 7 天：彩排，准备一份备用录屏
+
+## 答辩里的核心表述
+
+本系统不做静态手型识别，而聚焦惯性传感器更擅长的动态手势识别。通过在手背和前臂分别布置 `MPU6050`，计算相对姿态变化和相对角速度特征，降低了整条上肢协同运动对识别的干扰，在有限开发周期内兼顾了可实现性、稳定性与可解释性。

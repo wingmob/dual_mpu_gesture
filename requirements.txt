@@ -1,0 +1,6 @@
+﻿joblib>=1.3
+matplotlib>=3.8
+numpy>=1.26
+pandas>=2.2
+pyserial>=3.5
+scikit-learn>=1.4
