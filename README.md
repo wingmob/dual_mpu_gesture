@@ -78,7 +78,6 @@ ts_ms,ax1,ay1,az1,gx1,gy1,gz1,ax2,ay2,az2,gx2,gy2,gz2
 - `pronation`：旋前，向内旋
 - `supination`：旋后，向外旋
 
-如果时间紧，可以先做前 4 个。
 
 ## 快速开始
 
