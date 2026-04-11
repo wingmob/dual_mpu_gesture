@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+from collections import deque
 from dataclasses import dataclass
 import time
 
@@ -116,6 +117,12 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--min-duration", type=float, default=0.25, help="Ignore dynamic segments shorter than this duration in seconds.")
     parser.add_argument("--min-peak", type=float, default=120.0, help="Ignore dynamic segments whose motion peak is below this value.")
     parser.add_argument("--cooldown-seconds", type=float, default=0.60, help="Ignore new dynamic segments for a short time after each emitted result.")
+    parser.add_argument(
+        "--max-serial-lines-per-cycle",
+        type=int,
+        default=6,
+        help="Limit how many serial lines are processed before each camera refresh.",
+    )
     return parser
 
 
@@ -134,15 +141,23 @@ def resolve_active_label(
 def wait_for_stream_ready(ser: serial.Serial, timeout_s: float = 12.0) -> str | None:
     print("Waiting for board reset and gyro calibration (~6s)...")
     deadline = time.perf_counter() + timeout_s
+    recent_lines: deque[str] = deque(maxlen=20)
     while time.perf_counter() < deadline:
         line = ser.readline().decode("utf-8", errors="ignore")
         if not line:
             continue
+        stripped = line.strip()
+        if stripped:
+            recent_lines.append(stripped)
         if parse_frame_line(line) is not None:
             print("Dual MPU stream ready.")
             return line
-        if line.strip().startswith("# startup_halted"):
-            raise RuntimeError("Firmware reported startup_halted. Check the serial log with capture_stream.py.")
+        if stripped.startswith("# startup_halted"):
+            details = "\n".join(recent_lines)
+            raise RuntimeError(
+                "Firmware reported startup_halted. Recent serial output:\n"
+                f"{details}"
+            )
     return None
 
 
@@ -195,7 +210,8 @@ def main() -> None:
     try:
         while True:
             if serial_port and dynamic_engine:
-                while True:
+                serial_lines_processed = 0
+                while serial_lines_processed < max(1, args.max_serial_lines_per_cycle):
                     if first_dynamic_line is not None:
                         raw_line = first_dynamic_line
                         first_dynamic_line = None
@@ -203,6 +219,7 @@ def main() -> None:
                         raw_line = serial_port.readline().decode("utf-8", errors="ignore")
                     if not raw_line:
                         break
+                    serial_lines_processed += 1
                     event = dynamic_engine.push_line(raw_line)
                     if event is not None:
                         print(

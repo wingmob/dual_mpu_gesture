@@ -68,6 +68,13 @@ def ensure_camera_dependencies() -> None:
             f"Missing camera dependencies: {joined}. "
             "Install them in a Python 3.11/3.12 environment before using camera gestures."
         )
+    if not hasattr(mp, "solutions"):
+        version = getattr(mp, "__version__", "unknown")
+        raise RuntimeError(
+            "The installed mediapipe package is incompatible with this project: "
+            f"version {version} does not expose mp.solutions. "
+            "Install a classic MediaPipe release such as `mediapipe==0.10.21`."
+        )
 
 
 def _xyz(landmarks: Any, index: int) -> tuple[float, float, float]:

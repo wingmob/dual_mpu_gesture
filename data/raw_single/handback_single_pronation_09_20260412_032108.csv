@@ -1,0 +1,6 @@
+# label=pronation
+# trial=9
+# subject=handback_single
+# captured_at=20260412_032108
+# sensor_count=1
+ts_ms,ax,ay,az,gx,gy,gz
