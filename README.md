@@ -83,6 +83,11 @@ ts_ms,ax1,ay1,az1,gx1,gy1,gz1,ax2,ay2,az2,gx2,gy2,gz2
 
 1. 烧录 Arduino 固件  
    打开 `arduino/dual_mpu_gesture/dual_mpu_gesture.ino`
+   ```powershell
+   conda activate dual_mpu
+   arduino-cli compile --fqbn arduino:avr:mega D:\dual_mpu_gesture\arduino\dual_mpu_gesture
+   arduino-cli upload -p COM5 --fqbn arduino:avr:mega D:\dual_mpu_gesture\arduino\dual_mpu_gesture
+   ```
 
 2. 安装 Python 依赖
 
@@ -112,7 +117,7 @@ python .\python\train_model.py --data-dir .\data\raw --model-out .\models\gestur
 6. 实时识别
 
 ```powershell
-python .\python\realtime_demo.py --port COM5 --model .\models\gesture_model.joblib --plot
+python .\python\realtime_demo.py --port COM5 --model .\models\gesture_model.joblib --min-confidence 0.60 --quiet-frames 4 --max-frames 120 --min-frames 12 --min-duration 0.30 --min-peak 150 --cooldown-seconds 0.80
 ```
 
 ## 单 MPU6050 版本
