@@ -35,7 +35,10 @@ def select_peak_window(raw_data: pd.DataFrame, window_samples: int = 120) -> pd.
     if raw_data.empty or len(raw_data) <= window_samples:
         return raw_data.reset_index(drop=True)
 
-    enriched = enrich_stream(raw_data)
+    if "motion_energy" in raw_data.columns:
+        enriched = raw_data.reset_index(drop=True)
+    else:
+        enriched = enrich_stream(raw_data)
     scores = (
         enriched["motion_energy"]
         .rolling(window=9, min_periods=1, center=True)

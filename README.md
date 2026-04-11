@@ -115,4 +115,130 @@ python .\python\train_model.py --data-dir .\data\raw --model-out .\models\gestur
 python .\python\realtime_demo.py --port COM5 --model .\models\gesture_model.joblib --plot
 ```
 
+## 单 MPU6050 版本
+
+如果你当前只有 `1` 个 `MPU6050` 可用，可以直接使用仓库里的单传感器版本：
+
+- 固件：`arduino/single_mpu_gesture/single_mpu_gesture.ino`
+- 串口查看：`python/capture_stream_single.py`
+- 标签采集：`python/capture_labeled_single.py`
+- 模型训练：`python/train_model_single.py`
+- 实时识别：`python/realtime_demo_single.py`
+
+### 单传感器接线
+
+- `VCC -> 5V` 或 `3.3V`
+- `GND -> GND`
+- `SDA -> 20`
+- `SCL -> 21`
+- `AD0` 可接 `GND` 或 `VCC`
+
+单传感器固件会自动检测 `0x68` 或 `0x69`，不需要你改代码里的地址常量。
+
+### 单传感器串口协议
+
+表头为：
+
+```text
+ts_ms,ax,ay,az,gx,gy,gz
+```
+
+含义：
+
+- `a*`：加速度原始计数
+- `g*`：角速度原始计数
+
+### 单传感器流程
+
+1. 烧录固件  
+   打开 `arduino/single_mpu_gesture/single_mpu_gesture.ino`
+
+2. 查看原始串口流
+
+```powershell
+python .\python\capture_stream_single.py --port COM5
+```
+
+3. 采集带标签数据
+
+```powershell
+python .\python\capture_labeled_single.py --port COM5 --label flexion --trials 20
+python .\python\capture_labeled_single.py --port COM5 --label extension --trials 20
+python .\python\capture_labeled_single.py --port COM5 --label pronation --trials 20
+```
+
+4. 训练单传感器模型
+
+```powershell
+python .\python\train_model_single.py --data-dir .\data\raw_single --model-out .\models\gesture_model_single.joblib
+```
+
+5. 实时识别
+
+```powershell
+python .\python\realtime_demo_single.py --port COM5 --model .\models\gesture_model_single.joblib --plot
+```
+
+单传感器版本依赖 `手背` 或 `手腕附近` 的绝对姿态和角速度，识别效果通常会弱于双传感器方案，但足够完成 `屈伸`、`桡偏/尺偏`、`旋前/旋后` 这类动态手势的采集与分类验证。
+
+## 双 MPU + 摄像头混合方案
+
+如果你要在保留原有双 `MPU6050` 动态手势的同时，再新增 `fist`、`open_palm`、`thumb_up`、`victory`、`point`、`ok` 这类 `手指静态手势`，推荐使用混合方案：
+
+- 双 `MPU6050` 负责：
+  - `flexion`
+  - `extension`
+  - `radial_deviation`
+  - `ulnar_deviation`
+  - `pronation`
+  - `supination`
+- 摄像头 + `MediaPipe Hands` 负责：
+  - `fist`
+  - `open_palm`
+  - `thumb_up`
+  - `victory`
+  - `point`
+  - `ok`
+
+相关文件：
+
+- 摄像头手势模块：`python/camera_gestures.py`
+- 混合实时识别：`python/realtime_demo_hybrid.py`
+- 摄像头依赖：`requirements_camera.txt`
+
+### 摄像头依赖安装
+
+建议单独创建一个 `Python 3.11` 或 `3.12` 环境安装摄像头依赖，不要复用 `Python 3.13` 环境。
+
+```powershell
+conda create -n hybrid_gesture python=3.11 -y
+conda activate hybrid_gesture
+python -m pip install --upgrade pip
+python -m pip install -r .\requirements.txt
+python -m pip install -r .\requirements_camera.txt
+```
+
+### 先训练双 MPU 动态模型
+
+```powershell
+python .\python\train_model.py --data-dir .\data\raw --model-out .\models\gesture_model.joblib
+```
+
+### 运行 12 手势混合识别
+
+```powershell
+python .\python\realtime_demo_hybrid.py --port COM5 --dynamic-model .\models\gesture_model.joblib --camera-index 0
+```
+
+运行逻辑：
+
+- 当双 `MPU` 检测到动态动作段时，优先输出 `6` 个腕部动作标签
+- 当没有新的动态动作事件时，摄像头持续输出稳定的手指静态手势标签
+
+注意：
+
+- `point`、`thumb_up`、`victory`、`ok` 的摄像头规则识别默认假设 `手掌大致朝向摄像头`
+- `ok` 基于 `拇指-食指捏合` 和其余三指展开的几何规则
+- 如果你后续想提升 `手指静态手势` 的稳健性，可以再采集图像数据，把 `camera_gestures.py` 的启发式规则升级成自定义 `MediaPipe` 分类模型
+
 

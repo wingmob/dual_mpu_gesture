@@ -50,10 +50,12 @@ def main() -> None:
         print(f"Connected to {args.port} @ {args.baud}")
         print("Keep both sensors still for 2 seconds after reset or after sending recalibration.")
         time.sleep(2.0)
+        ser.reset_input_buffer()
 
         for trial_idx in range(1, args.trials + 1):
             print(f"\nTrial {trial_idx}/{args.trials} for label '{args.label}'")
             countdown(args.prep_seconds)
+            ser.reset_input_buffer()
             print("  perform gesture now")
             records = record_trial(ser, args.seconds)
             data = dataframe_from_records(records)
