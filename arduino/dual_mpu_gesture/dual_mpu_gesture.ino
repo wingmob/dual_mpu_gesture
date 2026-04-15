@@ -74,7 +74,10 @@ bool readRegisters(uint8_t addr, uint8_t startReg, uint8_t* buffer, uint8_t leng
     return false;
   }
 
-  uint8_t readCount = Wire.requestFrom(addr, length, true);
+  uint8_t readCount = Wire.requestFrom(
+      static_cast<uint8_t>(addr),
+      static_cast<uint8_t>(length),
+      static_cast<uint8_t>(true));
   if (readCount != length) {
     return false;
   }

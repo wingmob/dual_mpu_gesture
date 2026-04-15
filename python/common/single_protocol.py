@@ -3,9 +3,10 @@ from __future__ import annotations
 from dataclasses import dataclass
 from io import StringIO
 from pathlib import Path
-from typing import Iterable
+from typing import TYPE_CHECKING, Iterable
 
-import pandas as pd
+if TYPE_CHECKING:
+    import pandas as pd
 
 FRAME_COLUMNS = ["ts_ms", "ax", "ay", "az", "gx", "gy", "gz"]
 ACCEL_COLUMNS = ["ax", "ay", "az"]
@@ -40,6 +41,8 @@ def parse_frame_line(line: str) -> dict[str, int] | None:
 
 
 def dataframe_from_records(records: Iterable[dict[str, int]]) -> pd.DataFrame:
+    import pandas as pd
+
     df = pd.DataFrame.from_records(records, columns=FRAME_COLUMNS)
     if df.empty:
         return pd.DataFrame(columns=FRAME_COLUMNS)
@@ -47,6 +50,8 @@ def dataframe_from_records(records: Iterable[dict[str, int]]) -> pd.DataFrame:
 
 
 def load_recording(path: str | Path) -> Recording:
+    import pandas as pd
+
     metadata: dict[str, str] = {}
     lines: list[str] = []
 

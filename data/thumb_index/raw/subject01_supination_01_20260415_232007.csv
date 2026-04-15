@@ -1,0 +1,8 @@
+# label=supination
+# trial=1
+# subject=subject01
+# captured_at=20260415_232007
+# mode=thumb_index
+# sensor_1=thumb
+# sensor_2=index
+ts_ms,ax1,ay1,az1,gx1,gy1,gz1,ax2,ay2,az2,gx2,gy2,gz2

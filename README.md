@@ -6,15 +6,17 @@
 
 ## 方案概览
 
-本仓库当前包含 `4` 套可直接运行的方案：
+本仓库当前包含 `5` 套可直接运行的方案：
 
 1. `双 MPU + 手背/前臂`
    适合 `flexion / extension / radial_deviation / ulnar_deviation / pronation / supination`
 2. `双 MPU + 拇指/食指`
    适合 `fist / open_palm / thumb_up / victory / point / ok`，也支持把 `6` 个腕部标签一起放进同一个实验模型
-3. `单 MPU`
+3. `三 MPU + 手背/拇指/食指`
+   适合同时利用 `手背参考姿态` 和 `拇指/食指相对运动` 的复合手势实验
+4. `单 MPU`
    用于单传感器版本的腕部动态手势验证
-4. `双 MPU + 摄像头混合`
+5. `双 MPU + 摄像头混合`
    双 `MPU` 负责腕部动态，摄像头负责手指静态手势
 
 ## 目录结构
@@ -24,12 +26,16 @@ dual_mpu_gesture/
 ├─ arduino/
 │  ├─ dual_mpu_gesture/
 │  │  └─ dual_mpu_gesture.ino
+│  ├─ triple_mpu_gesture/
+│  │  └─ triple_mpu_gesture.ino
 │  ├─ single_mpu_gesture/
 │  │  └─ single_mpu_gesture.ino
 │  └─ mpu_whoami_probe/
 │     └─ mpu_whoami_probe.ino
 ├─ data/
 │  ├─ dual_wrist/
+│  │  └─ raw/
+│  ├─ hand_thumb_index/
 │  │  └─ raw/
 │  ├─ single_imu/
 │  │  └─ raw/
@@ -39,14 +45,23 @@ dual_mpu_gesture/
 │  └─ gesture_protocol.md
 ├─ models/
 │  ├─ dual_wrist/
+│  ├─ hand_thumb_index/
 │  ├─ single_imu/
 │  └─ thumb_index/
 ├─ python/
 │  ├─ common/
 │  │  ├─ dual_protocol.py
-│  │  └─ single_protocol.py
+│  │  ├─ single_protocol.py
+│  │  └─ triple_protocol.py
 │  ├─ schemes/
 │  │  ├─ dual_wrist/
+│  │  │  ├─ capture_labeled.py
+│  │  │  ├─ capture_stream.py
+│  │  │  ├─ features.py
+│  │  │  ├─ pose.py
+│  │  │  ├─ realtime_demo.py
+│  │  │  └─ train_model.py
+│  │  ├─ hand_thumb_index/
 │  │  │  ├─ capture_labeled.py
 │  │  │  ├─ capture_stream.py
 │  │  │  ├─ features.py
@@ -115,6 +130,18 @@ python -m pip install -r .\requirements.txt
 - `0x69` 传感器：`AD0 -> VCC`
 
 建议两个传感器安装时 `坐标方向保持一致`。
+
+### 三 MPU 手背 + 拇指 + 食指方案
+
+- `手背` 传感器：硬件 `I2C`，`SDA -> 20`，`SCL -> 21`，`AD0 -> GND`，地址 `0x68`
+- `拇指` 传感器：硬件 `I2C`，`SDA -> 20`，`SCL -> 21`，`AD0 -> VCC`，地址 `0x69`
+- `食指` 传感器：软件 `I2C`，`SDA -> 16`，`SCL -> 17`，`AD0 -> GND`，地址 `0x68`
+
+说明：
+
+- 第三颗 `MPU6050` 走独立的软件 `I2C`，这样不需要额外多路复用器
+- 三个传感器安装时建议尽量 `坐标方向保持一致`
+- 如果你想改软件 `I2C` 引脚，可直接修改 `arduino/triple_mpu_gesture/triple_mpu_gesture.ino` 里的 `SOFT_SDA_PIN / SOFT_SCL_PIN`
 
 ### 单 MPU 方案
 
@@ -253,7 +280,67 @@ python -m python.schemes.thumb_index.train_model --data-dir .\data\thumb_index\r
 python -m python.schemes.thumb_index.realtime_demo --port COM5 --model .\models\thumb_index\gesture_model.joblib
 ```
 
-## 方案三：单 MPU
+## 方案三：三 MPU 手背 + 大拇指 + 食指
+
+默认目录：
+
+- 数据：`data/hand_thumb_index/raw`
+- 模型：`models/hand_thumb_index/gesture_model.joblib`
+
+推荐标签：
+
+- 手指类：`fist / open_palm / thumb_up / victory / point / ok`
+- 腕部类：`flexion / extension / radial_deviation / ulnar_deviation / pronation / supination`
+
+这套方案的特点：
+
+- `手背` 传感器提供整手姿态参考
+- `拇指 / 食指` 传感器提供手指相对运动细节
+- 对同时包含 `腕部运动 + 手指形态` 的动作更友好
+
+### 第 1 步：烧录三 MPU 固件
+
+```powershell
+arduino-cli compile --fqbn arduino:avr:mega D:\dual_mpu_gesture\arduino\triple_mpu_gesture
+arduino-cli upload -p COM5 --fqbn arduino:avr:mega D:\dual_mpu_gesture\arduino\triple_mpu_gesture
+```
+
+### 第 2 步：查看原始串口流
+
+```powershell
+python -m python.schemes.hand_thumb_index.capture_stream --port COM5
+```
+
+### 第 3 步：采集带标签数据
+
+```powershell
+python -m python.schemes.hand_thumb_index.capture_labeled --port COM5 --label fist --trials 20
+python -m python.schemes.hand_thumb_index.capture_labeled --port COM5 --label open_palm --trials 20
+python -m python.schemes.hand_thumb_index.capture_labeled --port COM5 --label thumb_up --trials 20
+python -m python.schemes.hand_thumb_index.capture_labeled --port COM5 --label victory --trials 20
+python -m python.schemes.hand_thumb_index.capture_labeled --port COM5 --label point --trials 20
+python -m python.schemes.hand_thumb_index.capture_labeled --port COM5 --label ok --trials 20
+python -m python.schemes.hand_thumb_index.capture_labeled --port COM5 --label flexion --trials 20
+python -m python.schemes.hand_thumb_index.capture_labeled --port COM5 --label extension --trials 20
+python -m python.schemes.hand_thumb_index.capture_labeled --port COM5 --label radial_deviation --trials 20
+python -m python.schemes.hand_thumb_index.capture_labeled --port COM5 --label ulnar_deviation --trials 20
+python -m python.schemes.hand_thumb_index.capture_labeled --port COM5 --label pronation --trials 20
+python -m python.schemes.hand_thumb_index.capture_labeled --port COM5 --label supination --trials 20
+```
+
+### 第 4 步：训练模型
+
+```powershell
+python -m python.schemes.hand_thumb_index.train_model --data-dir .\data\hand_thumb_index\raw --model-out .\models\hand_thumb_index\gesture_model.joblib
+```
+
+### 第 5 步：实时识别
+
+```powershell
+python -m python.schemes.hand_thumb_index.realtime_demo --port COM5 --model .\models\hand_thumb_index\gesture_model.joblib
+```
+
+## 方案四：单 MPU
 
 默认目录：
 
@@ -305,7 +392,7 @@ python -m python.schemes.single_imu.train_model --data-dir .\data\single_imu\raw
 python -m python.schemes.single_imu.realtime_demo --port COM5 --model .\models\single_imu\gesture_model.joblib --plot
 ```
 
-## 方案四：双 MPU + 摄像头混合
+## 方案五：双 MPU + 摄像头混合
 
 这套方案依赖：
 
@@ -361,6 +448,11 @@ python -m python.schemes.hybrid.realtime_demo --port COM5 --dynamic-model .\mode
 - 数据目录：`data/thumb_index/raw`
 - 模型路径：`models/thumb_index/gesture_model.joblib`
 
+### 三 MPU 手背 + 大拇指 + 食指
+
+- 数据目录：`data/hand_thumb_index/raw`
+- 模型路径：`models/hand_thumb_index/gesture_model.joblib`
+
 ### 单 MPU
 
 - 数据目录：`data/single_imu/raw`
@@ -373,6 +465,12 @@ python -m python.schemes.hybrid.realtime_demo --port COM5 --dynamic-model .\mode
 
 ```text
 ts_ms,ax1,ay1,az1,gx1,gy1,gz1,ax2,ay2,az2,gx2,gy2,gz2
+```
+
+- 三 `MPU` 的 CSV 串口协议是：
+
+```text
+ts_ms,ax1,ay1,az1,gx1,gy1,gz1,ax2,ay2,az2,gx2,gy2,gz2,ax3,ay3,az3,gx3,gy3,gz3
 ```
 
 - 单 `MPU` 的 CSV 串口协议是：
