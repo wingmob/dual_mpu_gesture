@@ -1,136 +1,122 @@
-﻿# Dual MPU6050 Gesture Recognition Skeleton
+# Dual MPU6050 Gesture Recognition Skeleton
 
-- `Arduino Mega 2560` 负责双传感器采集与串口发送
-- `Python` 上位机负责记录数据、训练模型、实时分段与识别
-- 方案聚焦 `动态手势`，不是静态手型
+- `Arduino Mega 2560` 负责 `MPU6050` 数据采集与串口发送
+- `Python` 上位机负责串口记录、训练模型与实时识别
+- 目录已经按方案重构，终端命令统一使用 `python -m ...` 模块方式运行
 
-## 方案
+## 方案概览
 
-- 双 `MPU6050` 分别固定在 `手背` 和 `前臂`
-- 使用 `相对姿态` 与 `相对角速度`，降低整条手臂平移带来的干扰
-- 用 `RandomForest` 做首版分类，速度快、调参简单
-- 自带训练、实时识别、数据采集骨架，能快速出准确率和演示效果
+本仓库当前包含 `4` 套可直接运行的方案：
+
+1. `双 MPU + 手背/前臂`
+   适合 `flexion / extension / radial_deviation / ulnar_deviation / pronation / supination`
+2. `双 MPU + 拇指/食指`
+   适合 `fist / open_palm / thumb_up / victory / point / ok`，也支持把 `6` 个腕部标签一起放进同一个实验模型
+3. `单 MPU`
+   用于单传感器版本的腕部动态手势验证
+4. `双 MPU + 摄像头混合`
+   双 `MPU` 负责腕部动态，摄像头负责手指静态手势
 
 ## 目录结构
 
 ```text
 dual_mpu_gesture/
 ├─ arduino/
-│  └─ dual_mpu_gesture/
-│     └─ dual_mpu_gesture.ino
+│  ├─ dual_mpu_gesture/
+│  │  └─ dual_mpu_gesture.ino
+│  ├─ single_mpu_gesture/
+│  │  └─ single_mpu_gesture.ino
+│  └─ mpu_whoami_probe/
+│     └─ mpu_whoami_probe.ino
+├─ data/
+│  ├─ dual_wrist/
+│  │  └─ raw/
+│  ├─ single_imu/
+│  │  └─ raw/
+│  └─ thumb_index/
+│     └─ raw/
 ├─ docs/
 │  └─ gesture_protocol.md
-├─ python/
-│  ├─ capture_labeled.py
-│  ├─ capture_stream.py
-│  ├─ features.py
-│  ├─ pose.py
-│  ├─ protocol.py
-│  ├─ realtime_demo.py
-│  └─ train_model.py
-├─ data/
-│  └─ raw/
 ├─ models/
-└─ requirements.txt
+│  ├─ dual_wrist/
+│  ├─ single_imu/
+│  └─ thumb_index/
+├─ python/
+│  ├─ common/
+│  │  ├─ dual_protocol.py
+│  │  └─ single_protocol.py
+│  ├─ schemes/
+│  │  ├─ dual_wrist/
+│  │  │  ├─ capture_labeled.py
+│  │  │  ├─ capture_stream.py
+│  │  │  ├─ features.py
+│  │  │  ├─ pose.py
+│  │  │  ├─ realtime_demo.py
+│  │  │  └─ train_model.py
+│  │  ├─ hybrid/
+│  │  │  ├─ camera_gestures.py
+│  │  │  └─ realtime_demo.py
+│  │  ├─ single_imu/
+│  │  │  ├─ capture_labeled.py
+│  │  │  ├─ capture_stream.py
+│  │  │  ├─ features.py
+│  │  │  ├─ pose.py
+│  │  │  ├─ realtime_demo.py
+│  │  │  └─ train_model.py
+│  │  └─ thumb_index/
+│  │     ├─ capture_labeled.py
+│  │     ├─ capture_stream.py
+│  │     ├─ features.py
+│  │     ├─ pose.py
+│  │     ├─ realtime_demo.py
+│  │     └─ train_model.py
+│  └─ tools/
+│     └─ probe_whoami.py
+├─ requirements.txt
+└─ requirements_camera.txt
 ```
+
+## 统一终端前提
+
+以下命令默认都在仓库根目录执行：
+
+```powershell
+cd D:\dual_mpu_gesture
+```
+
+建议先准备基础环境：
+
+```powershell
+conda create -n dual_mpu python=3.11 -y
+conda activate dual_mpu
+python -m pip install --upgrade pip
+python -m pip install -r .\requirements.txt
+```
+
+说明：
+
+- 现在所有 Python 命令都用模块方式运行，例如 `python -m python.schemes.dual_wrist.capture_stream`
+- 这样可以直接匹配新的 package 目录结构，不依赖脚本相对路径
 
 ## 硬件接线
 
-两个模块都接到 `Arduino Mega 2560` 的同一条 I2C 总线：
+### 双 MPU 方案
+
+两个模块都接到 `Arduino Mega 2560` 的同一条 `I2C` 总线：
 
 - `VCC -> 5V` 或 `3.3V`
-  - 常见 `GY-521` 可接 `5V`
-  - 如果你的模块只支持 `3.3V`，按模块规格走
 - `GND -> GND`
 - `SDA -> 20`
 - `SCL -> 21`
 
 地址区分：
 
-- 手背传感器 `AD0 -> GND`，地址 `0x68`
-- 前臂传感器 `AD0 -> VCC`，地址 `0x69`
+- `0x68` 传感器：`AD0 -> GND`
+- `0x69` 传感器：`AD0 -> VCC`
 
-建议两个传感器安装时 `坐标方向保持一致`，比如箭头都指向手指方向。
+建议两个传感器安装时 `坐标方向保持一致`。
 
-## 串口协议
-
-固件以 `230400` 波特率输出 CSV。
-
-注释行以 `#` 开头，数据表头固定为：
-
-```text
-ts_ms,ax1,ay1,az1,gx1,gy1,gz1,ax2,ay2,az2,gx2,gy2,gz2
-```
-
-含义：
-
-- `1` 号传感器：手背
-- `2` 号传感器：前臂
-- `a*`：加速度原始计数
-- `g*`：角速度原始计数
-
-## 手势
-
-- `flexion`：屈腕，手掌向下压
-- `extension`：背伸，手背向上抬
-- `radial_deviation`：向拇指侧偏
-- `ulnar_deviation`：向小指侧偏
-- `pronation`：旋前，向内旋
-- `supination`：旋后，向外旋
-
-
-## 快速开始
-
-1. 烧录 Arduino 固件  
-   打开 `arduino/dual_mpu_gesture/dual_mpu_gesture.ino`
-   ```powershell
-   conda activate dual_mpu
-   arduino-cli compile --fqbn arduino:avr:mega D:\dual_mpu_gesture\arduino\dual_mpu_gesture
-   arduino-cli upload -p COM5 --fqbn arduino:avr:mega D:\dual_mpu_gesture\arduino\dual_mpu_gesture
-   ```
-
-2. 安装 Python 依赖
-
-```powershell
-python -m pip install -r requirements.txt
-```
-
-3. 连续查看原始串口流
-
-```powershell
-python .\python\capture_stream.py --port COM5
-```
-
-4. 采集带标签数据
-
-```powershell
-python .\python\capture_labeled.py --port COM5 --label flexion --trials 20
-python .\python\capture_labeled.py --port COM5 --label extension --trials 20
-```
-
-5. 训练模型
-
-```powershell
-python .\python\train_model.py --data-dir .\data\raw --model-out .\models\gesture_model.joblib
-```
-
-6. 实时识别
-
-```powershell
-python .\python\realtime_demo.py --port COM5 --model .\models\gesture_model.joblib --min-confidence 0.60 --quiet-frames 4 --max-frames 120 --min-frames 12 --min-duration 0.30 --min-peak 150 --cooldown-seconds 0.80
-```
-
-## 单 MPU6050 版本
-
-如果你当前只有 `1` 个 `MPU6050` 可用，可以直接使用仓库里的单传感器版本：
-
-- 固件：`arduino/single_mpu_gesture/single_mpu_gesture.ino`
-- 串口查看：`python/capture_stream_single.py`
-- 标签采集：`python/capture_labeled_single.py`
-- 模型训练：`python/train_model_single.py`
-- 实时识别：`python/realtime_demo_single.py`
-
-### 单传感器接线
+### 单 MPU 方案
 
 - `VCC -> 5V` 或 `3.3V`
 - `GND -> GND`
@@ -138,82 +124,198 @@ python .\python\realtime_demo.py --port COM5 --model .\models\gesture_model.jobl
 - `SCL -> 21`
 - `AD0` 可接 `GND` 或 `VCC`
 
-单传感器固件会自动检测 `0x68` 或 `0x69`，不需要你改代码里的地址常量。
+## 可选排查：WHO_AM_I 自检
 
-### 单传感器串口协议
+如果你怀疑双传感器地址冲突、接线错误，先烧录 `mpu_whoami_probe` 再读取串口摘要：
 
-表头为：
-
-```text
-ts_ms,ax,ay,az,gx,gy,gz
-```
-
-含义：
-
-- `a*`：加速度原始计数
-- `g*`：角速度原始计数
-
-### 单传感器流程
-
-1. 烧录固件  
-   打开 `arduino/single_mpu_gesture/single_mpu_gesture.ino`
-
-2. 查看原始串口流
+1. 编译并上传探测固件
 
 ```powershell
-python .\python\capture_stream_single.py --port COM5
+arduino-cli compile --fqbn arduino:avr:mega D:\dual_mpu_gesture\arduino\mpu_whoami_probe
+arduino-cli upload -p COM5 --fqbn arduino:avr:mega D:\dual_mpu_gesture\arduino\mpu_whoami_probe
 ```
 
-3. 采集带标签数据
+2. 运行串口解析工具
 
 ```powershell
-python .\python\capture_labeled_single.py --port COM5 --label flexion --trials 20
-python .\python\capture_labeled_single.py --port COM5 --label extension --trials 20
-python .\python\capture_labeled_single.py --port COM5 --label pronation --trials 20
+python -m python.tools.probe_whoami --port COM5 --raw
 ```
 
-4. 训练单传感器模型
+## 方案一：双 MPU 手背 + 前臂
+
+默认目录：
+
+- 数据：`data/dual_wrist/raw`
+- 模型：`models/dual_wrist/gesture_model.joblib`
+
+标签集合：
+
+- `flexion`
+- `extension`
+- `radial_deviation`
+- `ulnar_deviation`
+- `pronation`
+- `supination`
+
+### 第 1 步：烧录双 MPU 固件
 
 ```powershell
-python .\python\train_model_single.py --data-dir .\data\raw_single --model-out .\models\gesture_model_single.joblib
+arduino-cli compile --fqbn arduino:avr:mega D:\dual_mpu_gesture\arduino\dual_mpu_gesture
+arduino-cli upload -p COM5 --fqbn arduino:avr:mega D:\dual_mpu_gesture\arduino\dual_mpu_gesture
 ```
 
-5. 实时识别
+### 第 2 步：查看原始串口流
 
 ```powershell
-python .\python\realtime_demo_single.py --port COM5 --model .\models\gesture_model_single.joblib --plot
+python -m python.schemes.dual_wrist.capture_stream --port COM5
 ```
 
-单传感器版本依赖 `手背` 或 `手腕附近` 的绝对姿态和角速度，识别效果通常会弱于双传感器方案，但足够完成 `屈伸`、`桡偏/尺偏`、`旋前/旋后` 这类动态手势的采集与分类验证。
+### 第 3 步：采集带标签数据
 
-## 双 MPU + 摄像头混合方案
+```powershell
+python -m python.schemes.dual_wrist.capture_labeled --port COM5 --label flexion --trials 20
+python -m python.schemes.dual_wrist.capture_labeled --port COM5 --label extension --trials 20
+python -m python.schemes.dual_wrist.capture_labeled --port COM5 --label radial_deviation --trials 20
+python -m python.schemes.dual_wrist.capture_labeled --port COM5 --label ulnar_deviation --trials 20
+python -m python.schemes.dual_wrist.capture_labeled --port COM5 --label pronation --trials 20
+python -m python.schemes.dual_wrist.capture_labeled --port COM5 --label supination --trials 20
+```
 
-如果你要在保留原有双 `MPU6050` 动态手势的同时，再新增 `fist`、`open_palm`、`thumb_up`、`victory`、`point`、`ok` 这类 `手指静态手势`，推荐使用混合方案：
+### 第 4 步：训练模型
 
-- 双 `MPU6050` 负责：
-  - `flexion`
-  - `extension`
-  - `radial_deviation`
-  - `ulnar_deviation`
-  - `pronation`
-  - `supination`
-- 摄像头 + `MediaPipe Hands` 负责：
-  - `fist`
-  - `open_palm`
-  - `thumb_up`
-  - `victory`
-  - `point`
-  - `ok`
+```powershell
+python -m python.schemes.dual_wrist.train_model --data-dir .\data\dual_wrist\raw --model-out .\models\dual_wrist\gesture_model.joblib
+```
 
-相关文件：
+### 第 5 步：实时识别
 
-- 摄像头手势模块：`python/camera_gestures.py`
-- 混合实时识别：`python/realtime_demo_hybrid.py`
-- 摄像头依赖：`requirements_camera.txt`
+```powershell
+python -m python.schemes.dual_wrist.realtime_demo --port COM5 --model .\models\dual_wrist\gesture_model.joblib --min-confidence 0.60 --quiet-frames 4 --max-frames 120 --min-frames 12 --min-duration 0.30 --min-peak 150 --cooldown-seconds 0.80
+```
 
-### 摄像头依赖安装
+## 方案二：双 MPU 拇指 + 食指
 
-建议单独创建一个 `Python 3.11` 或 `3.12` 环境安装摄像头依赖，不要复用 `Python 3.13` 环境。
+默认目录：
+
+- 数据：`data/thumb_index/raw`
+- 模型：`models/thumb_index/gesture_model.joblib`
+
+推荐标签：
+
+- 手指类：`fist / open_palm / thumb_up / victory / point / ok`
+- 腕部类：`flexion / extension / radial_deviation / ulnar_deviation / pronation / supination`
+
+注意：
+
+- 这一套更像 `neutral -> target gesture -> hold briefly -> relax` 的动作分类
+- 如果把 `12` 类都放进一个模型，采集动作的一致性会更重要
+- 录腕部动作时，手指尽量保持稳定，不要叠加明显捏合或张指动作
+
+### 第 1 步：烧录双 MPU 固件
+
+```powershell
+arduino-cli compile --fqbn arduino:avr:mega D:\dual_mpu_gesture\arduino\dual_mpu_gesture
+arduino-cli upload -p COM5 --fqbn arduino:avr:mega D:\dual_mpu_gesture\arduino\dual_mpu_gesture
+```
+
+### 第 2 步：查看原始串口流
+
+```powershell
+python -m python.schemes.thumb_index.capture_stream --port COM5
+```
+
+### 第 3 步：采集带标签数据
+
+```powershell
+python -m python.schemes.thumb_index.capture_labeled --port COM5 --label fist --trials 20
+python -m python.schemes.thumb_index.capture_labeled --port COM5 --label open_palm --trials 20
+python -m python.schemes.thumb_index.capture_labeled --port COM5 --label thumb_up --trials 20
+python -m python.schemes.thumb_index.capture_labeled --port COM5 --label victory --trials 20
+python -m python.schemes.thumb_index.capture_labeled --port COM5 --label point --trials 20
+python -m python.schemes.thumb_index.capture_labeled --port COM5 --label ok --trials 20
+python -m python.schemes.thumb_index.capture_labeled --port COM5 --label flexion --trials 20
+python -m python.schemes.thumb_index.capture_labeled --port COM5 --label extension --trials 20
+python -m python.schemes.thumb_index.capture_labeled --port COM5 --label radial_deviation --trials 20
+python -m python.schemes.thumb_index.capture_labeled --port COM5 --label ulnar_deviation --trials 20
+python -m python.schemes.thumb_index.capture_labeled --port COM5 --label pronation --trials 20
+python -m python.schemes.thumb_index.capture_labeled --port COM5 --label supination --trials 20
+```
+
+### 第 4 步：训练模型
+
+```powershell
+python -m python.schemes.thumb_index.train_model --data-dir .\data\thumb_index\raw --model-out .\models\thumb_index\gesture_model.joblib
+```
+
+### 第 5 步：实时识别
+
+```powershell
+python -m python.schemes.thumb_index.realtime_demo --port COM5 --model .\models\thumb_index\gesture_model.joblib
+```
+
+## 方案三：单 MPU
+
+默认目录：
+
+- 数据：`data/single_imu/raw`
+- 模型：`models/single_imu/gesture_model.joblib`
+
+标签集合：
+
+- `flexion`
+- `extension`
+- `radial_deviation`
+- `ulnar_deviation`
+- `pronation`
+- `supination`
+
+### 第 1 步：烧录单 MPU 固件
+
+```powershell
+arduino-cli compile --fqbn arduino:avr:mega D:\dual_mpu_gesture\arduino\single_mpu_gesture
+arduino-cli upload -p COM5 --fqbn arduino:avr:mega D:\dual_mpu_gesture\arduino\single_mpu_gesture
+```
+
+### 第 2 步：查看原始串口流
+
+```powershell
+python -m python.schemes.single_imu.capture_stream --port COM5
+```
+
+### 第 3 步：采集带标签数据
+
+```powershell
+python -m python.schemes.single_imu.capture_labeled --port COM5 --label flexion --trials 20
+python -m python.schemes.single_imu.capture_labeled --port COM5 --label extension --trials 20
+python -m python.schemes.single_imu.capture_labeled --port COM5 --label radial_deviation --trials 20
+python -m python.schemes.single_imu.capture_labeled --port COM5 --label ulnar_deviation --trials 20
+python -m python.schemes.single_imu.capture_labeled --port COM5 --label pronation --trials 20
+python -m python.schemes.single_imu.capture_labeled --port COM5 --label supination --trials 20
+```
+
+### 第 4 步：训练模型
+
+```powershell
+python -m python.schemes.single_imu.train_model --data-dir .\data\single_imu\raw --model-out .\models\single_imu\gesture_model.joblib
+```
+
+### 第 5 步：实时识别
+
+```powershell
+python -m python.schemes.single_imu.realtime_demo --port COM5 --model .\models\single_imu\gesture_model.joblib --plot
+```
+
+## 方案四：双 MPU + 摄像头混合
+
+这套方案依赖：
+
+- 双 `MPU` 腕部动态模型
+- 摄像头
+- `MediaPipe Hands`
+
+建议单独使用摄像头环境，不要复用基础环境。
+
+### 第 1 步：创建并激活摄像头环境
 
 ```powershell
 conda create -n hybrid_gesture python=3.11 -y
@@ -223,27 +325,58 @@ python -m pip install -r .\requirements.txt
 python -m pip install -r .\requirements_camera.txt
 ```
 
-### 先训练双 MPU 动态模型
+### 第 2 步：烧录双 MPU 固件
 
 ```powershell
-python .\python\train_model.py --data-dir .\data\raw --model-out .\models\gesture_model.joblib
+arduino-cli compile --fqbn arduino:avr:mega D:\dual_mpu_gesture\arduino\dual_mpu_gesture
+arduino-cli upload -p COM5 --fqbn arduino:avr:mega D:\dual_mpu_gesture\arduino\dual_mpu_gesture
 ```
 
-### 运行 12 手势混合识别
+### 第 3 步：先训练腕部动态模型
 
 ```powershell
-python .\python\realtime_demo_hybrid.py --port COM5 --dynamic-model .\models\gesture_model.joblib --camera-index 0
+python -m python.schemes.dual_wrist.train_model --data-dir .\data\dual_wrist\raw --model-out .\models\dual_wrist\gesture_model.joblib
+```
+
+### 第 4 步：运行混合实时识别
+
+```powershell
+python -m python.schemes.hybrid.realtime_demo --port COM5 --dynamic-model .\models\dual_wrist\gesture_model.joblib --camera-index 0
 ```
 
 运行逻辑：
 
-- 当双 `MPU` 检测到动态动作段时，优先输出 `6` 个腕部动作标签
-- 当没有新的动态动作事件时，摄像头持续输出稳定的手指静态手势标签
+- 双 `MPU` 检测到动态动作段时，优先输出腕部标签
+- 没有新的动态事件时，摄像头持续输出稳定手指手势标签
 
-注意：
+## 默认数据与模型目录
 
-- `point`、`thumb_up`、`victory`、`ok` 的摄像头规则识别默认假设 `手掌大致朝向摄像头`
-- `ok` 基于 `拇指-食指捏合` 和其余三指展开的几何规则
-- 如果你后续想提升 `手指静态手势` 的稳健性，可以再采集图像数据，把 `camera_gestures.py` 的启发式规则升级成自定义 `MediaPipe` 分类模型
+### 双 MPU 手背 + 前臂
 
+- 数据目录：`data/dual_wrist/raw`
+- 模型路径：`models/dual_wrist/gesture_model.joblib`
 
+### 双 MPU 拇指 + 食指
+
+- 数据目录：`data/thumb_index/raw`
+- 模型路径：`models/thumb_index/gesture_model.joblib`
+
+### 单 MPU
+
+- 数据目录：`data/single_imu/raw`
+- 模型路径：`models/single_imu/gesture_model.joblib`
+
+## 说明
+
+- 手势动作定义与采集规则见 `docs/gesture_protocol.md`
+- 双 `MPU` 的 CSV 串口协议仍然是：
+
+```text
+ts_ms,ax1,ay1,az1,gx1,gy1,gz1,ax2,ay2,az2,gx2,gy2,gz2
+```
+
+- 单 `MPU` 的 CSV 串口协议是：
+
+```text
+ts_ms,ax,ay,az,gx,gy,gz
+```

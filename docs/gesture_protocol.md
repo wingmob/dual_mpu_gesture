@@ -1,13 +1,25 @@
-﻿# Gesture Protocol
+# Gesture Protocol
 
-## Mounting
+This project now supports two dual-`MPU6050` usage modes:
+
+- `wrist mode`: back of the hand + forearm, for `flexion/extension/radial_deviation/ulnar_deviation/pronation/supination`
+- `thumb/index mode`: thumb + index finger, for transition-based classification of `fist/open_palm/thumb_up/victory/point/ok/flexion/extension/radial_deviation/ulnar_deviation/pronation/supination`
+
+## Shared Mounting Rules
+
+- Keep both sensor axes aligned in the same direction
+- Fix them tightly; loose mounting will destroy repeatability
+- Add strain relief to the wires so cable pull does not move the boards
+- After power-on or recalibration, keep both sensors still for a few seconds
+
+## Wrist Mode
+
+### Mounting
 
 - Sensor 1: back of the hand
 - Sensor 2: forearm, near the wrist
-- Keep both sensor axes aligned in the same direction
-- Fix them tightly; loose mounting will destroy repeatability
 
-## Recording Rules
+### Recording Rules
 
 - Sit or stand in a stable posture
 - Elbow angle should remain roughly constant
@@ -16,7 +28,7 @@
 - Return to neutral pose after the gesture
 - Keep each gesture within about `1.0` to `1.5` seconds
 
-## Suggested Label Set
+### Suggested Label Set
 
 - `flexion`
 - `extension`
@@ -24,6 +36,46 @@
 - `ulnar_deviation`
 - `pronation`
 - `supination`
+
+## Thumb / Index Mode
+
+### Mounting
+
+- Sensor 1: thumb, dorsal side
+- Sensor 2: index finger, dorsal side
+- If you mount them on the nails, keep the boards low-profile and secure the wires carefully
+
+### Recording Rules
+
+- Wrist and forearm pose should stay roughly consistent across trials
+- Perform one gesture transition per trial
+- Start from a neutral hand pose
+- Move into the target gesture
+- Hold the target pose for about `0.5` to `1.0` seconds
+- Relax back toward neutral before the trial ends
+- Keep each gesture within about `1.5` to `2.0` seconds, with a bit of padding before and after
+
+### Suggested Label Set
+
+- `fist`
+- `open_palm`
+- `thumb_up`
+- `victory`
+- `point`
+- `ok`
+- `flexion`
+- `extension`
+- `radial_deviation`
+- `ulnar_deviation`
+- `pronation`
+- `supination`
+
+### Notes
+
+- This mode is better at classifying `motion into a pose` than detecting a pose that has been static for a long time
+- `victory` and `point` remain challenging because only thumb and index are instrumented
+- Keep your neutral pose consistent, otherwise the absolute finger-pose features will drift
+- For wrist labels in thumb/index mode, keep the fingers as still and repeatable as possible
 
 ## Minimum Dataset
 
