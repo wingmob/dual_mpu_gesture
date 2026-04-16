@@ -2,7 +2,6 @@
 
 - `Arduino Mega 2560` 负责 `MPU6050` 数据采集与串口发送
 - `Python` 上位机负责串口记录、训练模型与实时识别
-- 目录已经按方案重构，终端命令统一使用 `python -m ...` 模块方式运行
 
 ## 方案概览
 
@@ -107,11 +106,6 @@ conda activate dual_mpu
 python -m pip install --upgrade pip
 python -m pip install -r .\requirements.txt
 ```
-
-说明：
-
-- 现在所有 Python 命令都用模块方式运行，例如 `python -m python.schemes.dual_wrist.capture_stream`
-- 这样可以直接匹配新的 package 目录结构，不依赖脚本相对路径
 
 ## 硬件接线
 
